@@ -1,0 +1,85 @@
+chd-sc-edwdb03.corp.svbank.com	-- Boxi (Cluster 1)
+dfw-sc-edwdb01.corp.svbank.com  -- Tableau -- Node 1 (Cluster 2)
+dfw-sc-edwdb03.corp.svbank.com  -- Cluster - 3 - Node 1
+
+
+
+
+SELECT LOADDT,COUNT(*) FROM FRDS.FRDS_cLIENTS_MV GROUP BY LOADDT ORDER BY  LOADDT DESC;  
+SELECT LOADDT,COUNT(*) FROM FRDS.FRDS_OVERDRAFTS_MV GROUP BY LOADDT ORDER BY  LOADDT DESC;
+
+
+set linesize 400 pagesize 400
+select a.thread#, (select max (sequence#) from v$archived_log where archived='YES' and thread#=a.thread#) archived,max(a.sequence#) applied, (select max(sequence#) from v$archived_log where archived='YES' and thread#=a.thread#)-max(a.sequence#)gap
+from v$archived_log a where a.applied='YES' group by a.thread# order by thread#;
+
+TASK2793173
+
+select inst_id, process, status, thread#, sequence#, block#, blocks
+from gv$managed_standby
+where status in ('APPLYING_LOG','RECEIVING')
+or process = 'MRP0'
+order by 1;
+
+select profile,resource_name, limit from dba_profiles where profile = 'USERS';
+
+DW_APP
+DEFAULT
+SVB_PRIVILEGED_SYSTEM
+ORA_STIG_PROFILE
+USERS
+PROF
+SERVICE_ACCOUNT
+
+
+--------------------TAblue 
+
+SELECT LOADDT,COUNT(*) FROM FRDS.FRDS_cLIENTS_MV
+
+GROUP BY LOADDT ORDER BY  LOADDT DESC
+ 
+SELECT LOADDT,COUNT(*) FROM FRDS.FRDS_OVERDRAFTS_MV
+GROUP BY LOADDT ORDER BY  LOADDT DESC
+
+
+new dash board --
+VTB: Catalog Tasks by Assigned to | ServiceNow (service-now.com)
+
+TASK2799551
+----Sql Text 
+ select sql_text from v$sql where sql_id = '75jvwg86dunys';
+ 
+ --Undo retention 
+ 
+ select value from v$parameter
+ where name = 'undo_retention';
+ 
+ show parameters undo_retention;
+
+
+-- Cluster status 
+
+show parameter cluster
+
+
+checking service.
+
+ show parameter service;
+
+ 
+ --MRP status
+ 
+ select process,status from v$managed_standby;
+ 
+ 
+ select tablespace_name,retention from dba_tablespaces where contents = 'UNDOTBS4';
+ UNDOTBS2
+ 
+
+ UNDOTBS3
+ 
+ UNDOTBS4
+ 
+
+
+2qxqpsxwuhra9
