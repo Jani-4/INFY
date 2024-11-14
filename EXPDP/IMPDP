@@ -1,0 +1,292 @@
+
+Different Schema Refresh:
+=========================
+
+TASK2688450
+source 10.97.4.16
+target dfw-us-dwdb01.uat.svbank.com
+
+SOURCE Schema : DI_REPO on IMTPRD
+ 
+TARGET Schema : DI_REPO_BKP on IMTUAT
+===================================================
+**********
+On SOURCE:
+**********
+
+
+ set lines 200
+ set pages 200
+ col OWNER for a20
+ colDIRECTORY_NAME for a20
+ col DIRECTORY_NAME for a20
+ select * from dba_directories;
+
+
+Step - 1: Create Directory:
+--------------------------
+create or replace directory MKT_DB as '/u02/RITM1997559';
+
+GRANT READ, WRITE ON DIRECTORY MKT_DB to system;
+
+Step - 2: Check Schema Present on Database:
+-----------------------------------
+select USERNAME,ACCOUNT_STATUS from dba_users where USERNAME='EDW_CNTRL_REPO';
+
+USERNAME             ACCOUNT_STATUS
+-------------------- --------------------------------
+DI_REPO              OPEN
+
+Step - 3: Check User Default Tablespace:
+----------------------------------------
+set lines 200
+col USERNAME for a20
+col DEFAULT_TABLESPACE for a25
+col PROFILE for a20
+select username,DEFAULT_TABLESPACE, TEMPORARY_TABLESPACE,profile from dba_users where username='CBS_SIG_08312024';
+
+USERNAME             DEFAULT_TABLESPACE        TEMPORARY_TABLESPACE           PROFILE
+-------------------- ------------------------- ------------------------------ --------------------
+DI_REPO              DIREPO_DATA               TEMP                           SERVICE_ACCOUNT
+
+Step - 4: Check Schema size:
+----------------------------
+select OWNER,sum(bytes)/1024/1024/1000 "SIZE_IN_GB" from dba_segments where OWNER='CBS_SIG_08312024' group by owner order by owner;
+
+
+OWNER                SIZE_IN_GB
+-------------------- ----------
+DI_REPO              57.2910625
+
+Step - 5: Object Count :
+--------------------------
+select object_type,status,count(*) from dba_objects where owner IN('CBS') group by object_type, status order by 1,2;
+
+
+Step - 6: Export Schema:
+------------------------
+
+nohup expdp \"/ as sysdba\" directory=CBS dumpfile=CBS_SIG_08312024.dmp logfile=CBS_SIG_08312024.log SCHEMAS=CBS_SIG_08312024 & 
+
+ METRICS=Y CONTENT=ALL &
+ 
+nohup expdp \"/ as sysdba\" expdp directory=datapump_dir dumpfile=ORADB_SOE_2711.dmp logfile=ORADB_SOE_2711.log schemas=IPS01_UAT_CMS,IPS01_UAT_CMSAUD,DI_UAT
+
+
+------- Table Export ---------------
+
+nohup expdp \"/ as sysdba\" directory=MKT_DB dumpfile=MKT_DB%u.dmp Tables=MKT_DB.MKT_CONTACT_CLEAN,MKT_DB.MKT_CONTACT_MSTR,MKT_DB.MKT_CONTACT_EXCEPTION,MKT_DB.MKT_CONTACT_MSTR_HIST,MKT_DB.MKT_CONTACT_MASTERING_RULES logfile=MKT_DB.log CLUSTER=N compression=ALL PARALLEL=5
+
+
+MKT_DB.MKT_CONTACT_CLEAN
+MKT_DB.MKT_CONTACT_MSTR
+MKT_DB.MKT_CONTACT_EXCEPTION
+MKT_DB.MKT_CONTACT_MSTR_HIST
+MKT_DB.MKT_CONTACT_MASTERING_RULES
+
+
+[PROD oracle@chd-s-dwdb01 TASK2688450]$ ls -lrt
+total 14351840
+-rw-r-----. 1 oracle oinstall 5325373440 Jun 26 07:18 DI_REPO_exp_04.dmp
+-rw-r-----. 1 oracle oinstall 5074608128 Jun 26 07:18 DI_REPO_exp_03.dmp
+-rw-r-----. 1 oracle oinstall 2622590976 Jun 26 07:18 DI_REPO_exp_01.dmp
+-rw-r-----. 1 oracle oinstall 1673646080 Jun 26 07:18 DI_REPO_exp_02.dmp
+-rw-r--r--. 1 oracle oinstall      22391 Jun 26 07:18 DI_REPO_exp.log
+-rw-------. 1 oracle oinstall      22428 Jun 26 07:18 nohup.out
+[PROD oracle@chd-s-dwdb01 TASK2688450]$ du -sh *
+2.5G    DI_REPO_exp_01.dmp
+1.6G    DI_REPO_exp_02.dmp
+4.8G    DI_REPO_exp_03.dmp
+5.0G    DI_REPO_exp_04.dmp
+24K     DI_REPO_exp.log
+24K     nohup.out
+=====================================================================================================================================================================
+Step - 7: Transfer dmp file to target server:
+--------------------------------------
+scp *.dmp oracle@10.108.24.164:/u03/oracle/TASK2688450
+
+=====================================================================================================================================================================
+***********
+On Target :
+***********
+target dfw-us-dwdb01.uat.svbank.com
+
+SOURCE Schema : DI_REPO 	on IMTPRD
+TARGET Schema : DI_REPO_BKP on IMTUA
+========================================================================================================
+/u03/oracle/TASK2688450
+
+Step - 1: Check Schema Present on Database:
+--------------------------------------------
+
+select USERNAME,ACCOUNT_STATUS from dba_users where USERNAME='DI_REPO_BKP';
+USERNAME             ACCOUNT_STATUS
+-------------------- --------------------------------
+DI_REPO_BKP          OPEN
+
+Step - 2: Check User Default Tablespace:
+----------------------------------------
+select username,DEFAULT_TABLESPACE, TEMPORARY_TABLESPACE,profile from dba_users where username='DI_REPO_BKP';
+
+USERNAME             DEFAULT_TABLESPACE             TEMPORARY_TABLESPACE           PROFILE
+-------------------- ------------------------------ ------------------------------ --------------------
+DI_REPO_BKP          DI_REPO_DATA                   TEMP                           TOOLS_APP
+
+
+Step - 3: Create Directory:
+---------------------------
+
+create or replace directory TASK2688450 as '/u03/oracle/TASK2688450';
+
+GRANT READ, WRITE ON DIRECTORY TASK2688450 to system;
+
+
+Take Safe_Backup of target schema:
+==================================
+
+nohup expdp \"/ as sysdba\" directory=TASK2688450 dumpfile=safe_DI_REPO_BKP_EXPORT.dmp logfile=safe_DI_REPO_BKP_EXPORT.log SCHEMAS=DI_REPO_BKP METRICS=Y CONTENT=ALL &
+
+
+[UAT oracle@dfw-us-dwdb01 TASK2688450]$ pwd
+/u03/oracle/TASK2688450
+[UAT oracle@dfw-us-dwdb01 TASK2688450]$ ls -lrt
+total 14352144
+-rw-r-----. 1 oracle oinstall 2622590976 Jun 26 14:05 DI_REPO_exp_01.dmp
+-rw-r-----. 1 oracle oinstall 1673646080 Jun 26 14:07 DI_REPO_exp_02.dmp
+-rw-r-----. 1 oracle oinstall 5074608128 Jun 26 14:11 DI_REPO_exp_03.dmp
+-rw-r-----. 1 oracle oinstall 5325373440 Jun 26 14:16 DI_REPO_exp_04.dmp
+-rw-------. 1 oracle oinstall 9325373840 Jun 26 14:15 safe_DI_REPO_BKP_EXPORT.dmp
+-rw-------. 1 oracle oinstall 9325373840 Jun 26 14:15 safe_DI_REPO_BKP_EXPORT.log
+
+
+Step - 4: Drop all present object:
+------------------------------------
+
+spool drop_table.sql;
+select 'drop ' || object_type || ' ' || owner || '."' || object_name || '" cascade constraints;' from dba_objects where owner in ('CBS_SIG_08312024') and object_type = 'TABLE' ;
+spool off;
+
+spool drop_objects.sql;
+select 'drop ' || object_type || ' ' || owner || '."' || object_name || '";' from dba_objects where owner in ('CBS_SIG_08312024') and object_type not in ('INDEX','LOB', 'TABLE');
+spool off;
+
+spool trace_drop_objects.log;
+@drop_table.sql;
+@drop_objects.sql;
+spool off; 
+
+Step - 5: LOB object is any :
+-----------------------------
+
+SQL> purge dba_recyclebin;
+
+DBA Recyclebin purged.
+
+
+Step - 6: Check LOB count:
+-----------------------------
+
+select object_type,status,count(*) from dba_objects where owner IN('CBS') group by object_type, status order by 1,2;
+MKT_DB.MKT_CONTACT_MSTR
+
+no rows selected
+
+Step - 7: Import:
+-----------------
+nohup impdp \"/ as sysdba\" directory=CBS dumpfile=CBS_bkp.dmp logfile=CBS_imp.log remap_schema=CBS:CBS_SIG_08312024 CONTENT=ALL  TABLE_EXISTS_ACTION=replace &
+
+
+Step - 8: Object Count :
+--------------------------
+select object_type,status,count(*) from dba_objects where owner IN('DI_REPO_BKP') group by object_type, status order by 1,2;
+
+
+Step - 9: Clear invalid Objects:
+--------------------------------
+@$ORACLE_HOME/rdbms/admin/utlrp.sql
+
+======================================================================================================================================================================================================================
+Step - 10:Validation:
+---------------------
+Source Object Count:
+====================
+SQL> select object_type,status,count(*) from dba_objects where owner IN('DI_REPO_BKP') group by object_type, status order by 1,2;
+
+OBJECT_TYPE             STATUS    COUNT(*)
+----------------------- ------- ----------
+INDEX                   VALID          208
+LOB                     VALID            7
+SEQUENCE                VALID           17
+TABLE                   VALID          172
+VIEW                    VALID           29
+
+SQL> !hostname; date
+chd-s-dwdb01.corp.svbank.com
+Wed Jun 26 08:56:58 MDT 2024
+
+
+Target Object Count:
+====================
+
+SQL> select object_type,status,count(*) from dba_objects where owner IN('DI_REPO_BKP') group by object_type, status order by 1,2;
+
+OBJECT_TYPE             STATUS    COUNT(*)
+----------------------- ------- ----------
+INDEX                   VALID          208
+LOB                     VALID            7
+SEQUENCE                VALID           17
+TABLE                   VALID          172
+VIEW                    VALID           29
+
+SQL> !hostname;date
+dfw-us-dwdb01.uat.svbank.com
+Wed Jun 26 15:07:10 UTC 2024
+
+
+SELECT sum(bytes)/1024/1024/1024 as "Size in GB"
+from dba_segments
+WHERE owner = UPPER('DI_UAT'); 
+
+
+
+select owner,sum(bytes)/1024/1024/1024 as "Size in GB"
+from dba_segments group by owner;
+
+SQL> SELECT sum(bytes)/1024/1024/1024 as "Size in GB"
+from dba_segments
+WHERE owner = UPPER('IPS01_UAT_CMS');   2    3
+
+Size in GB
+----------
+ .06036377
+
+SQL>
+SQL>
+SQL>
+SQL> SELECT sum(bytes)/1024/1024/1024 as "Size in GB"
+from dba_segments
+WHERE owner = UPPER('IPS01_UAT_CMSAUD');   2    3
+
+Size in GB
+----------
+15.4907837
+
+SQL> SELECT sum(bytes)/1024/1024/1024 as "Size in GB"
+from dba_segments
+WHERE owner = UPPER('DI_UAT');   2    3
+
+Size in GB
+----------
+9.01953125
+
+ SELECT SUM(bytes)/1024/1024 AS "Table Size (MB)" FROM user_segments WHERE segment_name='MKT_CONTACT_MSTR';
+ 
+SELECT SUM(bytes)/1024/1024/1024 AS "Table Size (GB)" FROM dba_segments WHERE owner='MKT_DB' and segment_name='MKT_CONTACT_MSTR';
+
+SELECT SUM(bytes)/1024/1024/1024 AS "Table Size (GB)" FROM dba_segments WHERE owner='MKT_DB' and segment_name='MKT_CONTACT_CLEAN';
+
+SELECT SUM(bytes)/1024/1024/1024 AS "Table Size (GB)" FROM dba_segments WHERE owner='MKT_DB' and segment_name='MKT_CONTACT_EXCEPTION';
+
+SELECT SUM(bytes)/1024/1024/1024 AS "Table Size (GB)" FROM dba_segments WHERE owner='MKT_DB' and segment_name='MKT_CONTACT_MSTR_HIST';
+
+SELECT SUM(bytes)/1024/1024/1024 AS "Table Size (GB)" FROM dba_segments WHERE owner='MKT_DB' and segment_name='MKT_CONTACT_MASTERING_RULES';
