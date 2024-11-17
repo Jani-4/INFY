@@ -1,0 +1,197 @@
+For Adhoc export Backup
+
+RE: RITM1882119 | Request to take backup of oracle DB in UAT
+Check request ticket 
+
+ 
+
+Check DB details and requirement -
+ 
+
+Check Approval – once approved then procceed 
+ 
+
+
+
+ 
+
+
+Step 1 - Login to Database 
+ 
+
+
+
+
+
+
+
+
+
+
+
+
+Step 2 - Check DB SIZE : 
+
+
+col "Database Size" format a20
+col "Free space" format a20
+col "Used space" format a20
+select round(sum(used.bytes) / 1024 / 1024 / 1024 ) || ' GB' "Database Size"
+, round(sum(used.bytes) / 1024 / 1024 / 1024 ) -
+round(free.p / 1024 / 1024 / 1024) || ' GB' "Used space"
+, round(free.p / 1024 / 1024 / 1024) || ' GB' "Free space"
+from (select bytes
+from v$datafile
+union all
+select bytes
+from v$tempfile
+union all
+select bytes
+from v$log) used , (select sum(bytes) as p
+from dba_free_space) free
+group by free.p
+/
+
+ 
+
+Step 3 - Check Free Space Location.
+
+Asmcmd>lsdg
+ 
+Step 4 - 
+Syntax: – for example create directories on database.
+CREATE OR REPLACE DIRECTORY <directory_name> AS '<operating_system_path>';
+Note: – ‘directory_name’ is unique directory name and ‘operating_system_path‘ specify the full path name of operating system directory of the server.
+SQL> CREATE OR REPLACE DIRECTORY DATA_PUMP_DIR _DIR AS '/u01/app/oracle/admin/JIRADCUAT/dpdump/';
+To grant read, write on to user.
+SQL> GRANT READ, WRITE ON DIRECTORY  DATA_PUMP_DIR  TO SYS;
+To check the dba directory created.
+SQL>SELECT *FROM DBA_DIRECTORIES;
+
+SQL> SELECT *FROM ALL_DIRECTORIES;
+If Directory not found then create oracle directory: –
+#mkdir -p /u01/app/oracle/admin/JIRADCUAT/dpdump/
+#chmod -R 777 /u01/app/oracle/admin/JIRADCUAT/dpdump/
+
+#ls -ltr /u01/app/oracle/admin/JIRADCUAT/dpdump/
+
+
+
+
+ 
+
+
+Step 5 - 
+$  nohup expdp "'/ as sysdba'" directory=DATAPUMP_LOG dumpfile=BACKUP_RITM1882119_Jira_%U.dmp logfile=DATA_PUMP_DIR:BACKUP_RITM1882119_Jira.log Full=Y compression=all parallel=6 &
+
+
+ 
+
+Step 6 - 
+Backup Completion status – 
+
+ 
+
+Step 7  -
+Backup Location :
+
+ASMCMD [+DATA/JIRAUATDB/DBDUMPS] > pwd
++DATA/JIRAUATDB/DBDUMPS
+ASMCMD [+DATA/JIRAUATDB/DBDUMPS] >
+
+ 
+
+
+Once backup has been completed update on RITM or Ctask
+ 
+
+
+
+
+
+
+
+
+
+
+
+For Adhoc RMAN Backup - 
+
+Check DB Size - 
+
+col "Database Size" format a20
+col "Free space" format a20
+col "Used space" format a20
+select round(sum(used.bytes) / 1024 / 1024 / 1024 ) || ' GB' "Database Size"
+, round(sum(used.bytes) / 1024 / 1024 / 1024 ) -
+round(free.p / 1024 / 1024 / 1024) || ' GB' "Used space"
+, round(free.p / 1024 / 1024 / 1024) || ' GB' "Free space"
+from (select bytes
+from v$datafile
+union all
+select bytes
+from v$tempfile
+union all
+select bytes
+from v$log) used , (select sum(bytes) as p
+from dba_free_space) free
+group by free.p
+/
+
+
+ 
+
+RMAN Level 1 backup - 
+
+
+RMAN> run
+{
+ALLOCATE CHANNEL CH1 DEVICE TYPE DISK FORMAT '/oradata/backup/LABDBDUP/INCR/labdbdup_%U';
+ALLOCATE CHANNEL CH2 DEVICE TYPE DISK FORMAT '/oradata/backup/LABDBDUP/INCR/labdbdup_%U';
+BACKUP tag 'INCR1_DB' INCREMENTAL LEVEL=1 DATABASE PLUS ARCHIVELOG;
+BACKUP CURRENT CONTROLFILE TAG 'INCR1_CTL' FORMAT '/oradata/backup/LABDBDUP/INCR/labdbdupCTL_%U';
+BACKUP SPFILE TAG 'INCR1_SPFILE' FORMAT '/oradata/backup/LABDBDUP/INCR/labdbdupSPF_%U';
+RELEASE CHANNEL CH1;
+RELEASE CHANNEL CH2;
+}
+$ cd /oradata/backup/LABDBDUP/INCR
+$ ls -lrt
+
+
+RMAN Level 0 backup - 
+
+export ORACLE_HOME=/rdbms/app/oracle/12.1.0.2/db
+export PATH=$ORACLE_HOME/bin:$PATH
+$ORACLE_HOME/bin/rman << EOF >> /backup/IDQDB/rman_level0_disk.log
+connect target / ;
+run {
+host "date";
+allocate channel c1  DEVICE TYPE DISK   format '/backup/IDQDB/IDQDB_%U' maxpiecesize 3G;
+allocate channel c2  DEVICE TYPE DISK   format '/backup/IDQDB/IDQDB_%U' maxpiecesize 3G;
+allocate channel c3  DEVICE TYPE DISK   format '/backup/IDQDB/IDQDB_%U' maxpiecesize 3G;
+allocate channel c4  DEVICE TYPE DISK   format '/backup/IDQDB/IDQDB_%U' maxpiecesize 3G;
+BACKUP as compressed backupset TAG 'BKP_IDQDB' incremental level 0 filesperset 10
+DATABASE INCLUDE CURRENT CONTROLFILE;
+release channel c1 ;
+release channel c2 ;
+release channel c3 ;
+release channel c4 ;
+host "date";
+}
+EOF
+
+
+run
+{
+ALLOCATE CHANNEL CH1 DEVICE TYPE DISK FORMAT '/u01/backup/dbsguru_%U';
+ALLOCATE CHANNEL CH2 DEVICE TYPE DISK FORMAT '/u01/backup/dbsguru_%U';
+ALLOCATE CHANNEL CH3 DEVICE TYPE DISK FORMAT '/u01/backup/dbsguru_%U';
+BACKUP tag 'UPGRADE_DB' FORCE AS COMPRESSED BACKUPSET DATABASE PLUS ARCHIVELOG;
+BACKUP CURRENT CONTROLFILE TAG 'UPGRADE_CTL' FORMAT '/u01/backup/dbsguructl_%u';
+BACKUP SPFILE TAG 'UPGRADE_SPFILE' FORMAT '/u01/backup/DBSGURUSPF_%U';
+RELEASE CHANNEL CH1;
+RELEASE CHANNEL CH2;
+RELEASE CHANNEL CH3;
+}
+
+
